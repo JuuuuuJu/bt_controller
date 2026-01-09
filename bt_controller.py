@@ -6,6 +6,14 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class ESP32BTSender:
+    CMD_MAP = {
+        "RESET": 0x01,
+        "READY": 0x02,
+        "TEST":  0x03,
+        "PLAY":  0xA0,
+        "PAUSE": 0xA1,
+    }
+
     def __init__(self, port, baud_rate=115200, timeout=1):
         """
         Initialize ESP32 BT Sender
@@ -35,17 +43,33 @@ class ESP32BTSender:
             self.ser.close()
             logger.info("Serial connection closed.")
 
-    def send_burst(self, cmd_type, burst_count, delay_sec, target_ids, retries=3):
+    def send_burst(self, cmd_input, delay_sec, target_ids, retries=3):
         """
         Send burst command to ESP32 BT device
-        :param cmd_type: 指令類型 (int, e.g., 0xA0)
-        :param burst_count: 發送次數 (int)
+        :param cmd_input: 指令類型 (str 或 int), e.g., 'PLAY', 'RESET' 或 0xA0
         :param delay_sec: 總延遲時間 (秒)
         :param target_ids: 目標 ID 列表 (list of int, e.g., [0, 1])
         :return: (bool) True if success, False otherwise
         """
+        if delay_sec < 1.0:
+            logger.error(f"Delay too short: {delay_sec}s. Minimum allowed is 1.0s.")
+            return False
         if not self.ser or not self.ser.is_open:
             logger.error("Serial port not open. Call connect() first.")
+            return False
+        
+        cmd_int = 0
+        if isinstance(cmd_input, str):
+            cmd_key = cmd_input.upper()
+            if cmd_key in self.CMD_MAP:
+                cmd_int = self.CMD_MAP[cmd_key]
+            else:
+                logger.error(f"Unknown command string: {cmd_input}")
+                return False
+        elif isinstance(cmd_input, int):
+            cmd_int = cmd_input
+        else:
+            logger.error("Invalid command type. Must be str or int.")
             return False
 
         delay_us = int(delay_sec * 1_000_000)
@@ -53,7 +77,7 @@ class ESP32BTSender:
         for pid in target_ids:
             target_mask |= (1 << pid)
 
-        command_str = f"{cmd_type},{burst_count},{delay_us},{target_mask:x}\n"
+        command_str = f"{cmd_int},{delay_us},{target_mask:x}\n"
         
         for attempt in range(retries + 1):
             if attempt > 0:
