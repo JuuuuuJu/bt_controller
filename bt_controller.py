@@ -66,7 +66,7 @@ class ESP32BTSender:
                             t_end_pc = time.perf_counter()
                             
                             # 1. 計算總 RTT (PC -> ESP -> PC)
-                            total_rtt_us = (t_end_pc - t_start_pc) * 1_000_000
+                            total_rtt_us = (t_end_pc - t_start_pc) * 1000000
                             
                             # 2. 解析 ESP32 詳細計時
                             # 格式: ACK:OK:Read:Parse:Total
@@ -88,7 +88,7 @@ class ESP32BTSender:
                             transport_us = total_rtt_us - esp_total_us
                             
                             print("\n" + "="*40)
-                            print(f"Latency Analysis (Attempt {attempt+1})")
+                            print(f"Latency Analysis")
                             print("="*40)
                             print(f"Total Round-Trip Time : {total_rtt_us:8.2f} us")
                             print(f"  ├─ Transport (USB/OS) : {transport_us:8.2f} us")
