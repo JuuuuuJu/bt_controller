@@ -51,6 +51,8 @@ class ESP32BTSender:
             
             try:
                 self.ser.reset_input_buffer() # 發送前清空舊雜訊
+                # [PC Start]
+                t_start_pc = time.perf_counter()
                 self.ser.write(packet.encode('utf-8'))
 
                 # 等待 ACK (雖然沒有 Checksum，但確認收到還是必要的)
@@ -60,7 +62,41 @@ class ESP32BTSender:
                         line = self.ser.readline().decode('utf-8', errors='ignore').strip()
                         
                         if "ACK:OK" in line:
-                            logger.info(f"Success: {line}")
+                            # [PC End]
+                            t_end_pc = time.perf_counter()
+                            
+                            # 1. 計算總 RTT (PC -> ESP -> PC)
+                            total_rtt_us = (t_end_pc - t_start_pc) * 1_000_000
+                            
+                            # 2. 解析 ESP32 詳細計時
+                            # 格式: ACK:OK:Read:Parse:Total
+                            esp_read_us = 0.0
+                            esp_parse_us = 0.0
+                            esp_total_us = 0.0
+                            
+                            try:
+                                parts = line.split(':')
+                                # parts[0]="ACK", parts[1]="OK", parts[2]=Read, parts[3]=Parse, parts[4]=Total
+                                if len(parts) >= 5:
+                                    esp_read_us = float(parts[2])
+                                    esp_parse_us = float(parts[3])
+                                    esp_total_us = float(parts[4])
+                            except ValueError:
+                                logger.warning(f"Failed to parse timing: {line}")
+
+                            # 3. 計算純傳輸延遲 (USB + Driver + Cable)
+                            transport_us = total_rtt_us - esp_total_us
+                            
+                            print("\n" + "="*40)
+                            print(f"Latency Analysis (Attempt {attempt+1})")
+                            print("="*40)
+                            print(f"Total Round-Trip Time : {total_rtt_us:8.2f} us")
+                            print(f"  ├─ Transport (USB/OS) : {transport_us:8.2f} us")
+                            print(f"  └─ ESP32 Internal     : {esp_total_us:8.2f} us")
+                            print(f"       ├─ RingBuf Read  : {esp_read_us:8.2f} us")
+                            print(f"       └─ Logic & Parse : {esp_parse_us:8.2f} us")
+                            print("="*40 + "\n")
+                            
                             return True
                         elif "NAK" in line:
                             logger.warning(f"Device rejected command: {line}")
