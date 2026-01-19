@@ -6,9 +6,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class ESP32BTSender:
-    CMD_MAP = { "RESET": 0x01, "READY": 0x02, "TEST": 0x03, "PLAY": 0xA0, "PAUSE": 0xA1 }
+    CMD_MAP = { "RESET": 0x01, "RELEASE": 0x02, "TEST": 0x03, "LOAD": 0x04, "PLAY": 0xA0, "PAUSE": 0xA1 }
 
-    def __init__(self, port, baud_rate=115200, timeout=1):
+    def __init__(self, port, baud_rate=921600, timeout=1):
         self.port = port
         self.baud_rate = baud_rate
         self.timeout = timeout
@@ -28,7 +28,7 @@ class ESP32BTSender:
         if self.ser and self.ser.is_open:
             self.ser.close()
 
-    def send_burst(self, cmd_input, delay_sec, prep_led_sec, target_ids, retries=3):
+    def send_burst(self, cmd_input, delay_sec, prep_led_sec, target_ids,r,g,b, retries=3):
         if not self.ser or not self.ser.is_open:
             return False
 
@@ -40,7 +40,7 @@ class ESP32BTSender:
             target_mask |= (1 << pid)
 
         # 格式: 160,4000000,100000,23
-        packet = f"{cmd_int},{delay_us},{prep_led_us},{target_mask:x}\n"
+        packet = f"{cmd_int},{delay_us},{prep_led_us},{target_mask:x},{r},{g},{b}\n"
 
         for attempt in range(retries + 1):
             if attempt > 0:
@@ -87,15 +87,15 @@ class ESP32BTSender:
                             # 3. 計算純傳輸延遲 (USB + Driver + Cable)
                             transport_us = total_rtt_us - esp_total_us
                             
-                            print("\n" + "="*40)
-                            print(f"Latency Analysis")
-                            print("="*40)
-                            print(f"Total Round-Trip Time : {total_rtt_us:8.2f} us")
-                            print(f"  ├─ Transport (USB/OS) : {transport_us:8.2f} us")
-                            print(f"  └─ ESP32 Internal     : {esp_total_us:8.2f} us")
-                            print(f"       ├─ RingBuf Read  : {esp_read_us:8.2f} us")
-                            print(f"       └─ Logic & Parse : {esp_parse_us:8.2f} us")
-                            print("="*40 + "\n")
+                            # print("\n" + "="*40)
+                            # print(f"Latency Analysis")
+                            # print("="*40)
+                            # print(f"Total Round-Trip Time : {total_rtt_us:8.2f} us")
+                            # print(f"  ├─ Transport (USB/OS) : {transport_us:8.2f} us")
+                            # print(f"  └─ ESP32 Internal     : {esp_total_us:8.2f} us")
+                            # print(f"       ├─ RingBuf Read  : {esp_read_us:8.2f} us")
+                            # print(f"       └─ Logic & Parse : {esp_parse_us:8.2f} us")
+                            # print("="*40 + "\n")
                             
                             return True
                         elif "NAK" in line:
