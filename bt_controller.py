@@ -5,6 +5,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 cmd_list = [0]*16
+idx=-1
 class ESP32BTSender:
     CMD_MAP = { "PLAY": 0x01, "PAUSE": 0x02,"RESET": 0x03, "RELEASE": 0x04,  "LOAD": 0x05,"TEST": 0x06,  "CANCEL": 0x07 }
 
@@ -29,6 +30,7 @@ class ESP32BTSender:
             self.ser.close()
 
     def send_burst(self, cmd_input, delay_sec, prep_led_sec, target_ids, data, retries=3):
+        global idx, cmd_list
         if not self.ser or not self.ser.is_open:
             return False
 
@@ -54,15 +56,17 @@ class ESP32BTSender:
                 t_start_pc = time.perf_counter()
                 target_time = t_start_pc + delay_sec
                 add_cmd_fail = 1
-                for i in range(len(cmd_list)):
-                    if cmd_list[i] < target_time:
+                for i in range(16):
+                    if cmd_list[i] < target_time and i!=idx:
                         cmd_list[i] = target_time
                         print(f"Command type: {cmd_int}")
                         print(f"Command id: {i}")
                         print(f"Target time: {target_time:8.2f}")
                         cmd_int = (i<<4) + cmd_int
                         add_cmd_fail = 0
+                        idx=i
                         break 
+                
                 if add_cmd_fail == 1:
                     print("Add command FAIL due to full panding number\n")
                     return False
