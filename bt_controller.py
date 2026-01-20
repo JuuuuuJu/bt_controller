@@ -41,14 +41,13 @@ class ESP32BTSender:
         for pid in target_ids:
             target_mask |= (1 << pid)
         
-        packet = f"{cmd_int},{delay_us},{prep_led_us},{target_mask:x},{data[0]},{data[1]},{data[2]}\n"
-
+        packet=""
         for attempt in range(retries + 1):
             if attempt > 0:
                 logger.warning(f"Retrying... ({attempt}/{retries})")
                 time.sleep(0.1)
 
-            logger.info(f"Sending: {packet.strip()}")
+            # logger.info(f"Sending: {packet.strip()}")
             
             try:
                 self.ser.reset_input_buffer()
@@ -62,11 +61,12 @@ class ESP32BTSender:
                         print(f"Command type: {cmd_int}")
                         print(f"Command id: {i}")
                         print(f"Target time: {target_time:8.2f}")
-                        cmd_int = (i<<4) + cmd_int
+                        cmd_int = i*16 + cmd_int
+                        print(f"sent cmd_int: {cmd_int}")
+                        packet = f"{cmd_int},{delay_us},{prep_led_us},{target_mask:x},{data[0]},{data[1]},{data[2]}\n"
                         add_cmd_fail = 0
                         idx=i
                         break 
-                
                 if add_cmd_fail == 1:
                     print("Add command FAIL due to full panding number\n")
                     return False
