@@ -1,6 +1,7 @@
 import serial
 import time
 import logging
+import json
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -29,8 +30,22 @@ class ESP32BTSender:
         if self.ser and self.ser.is_open:
             self.ser.close()
 
+    def _format_response(self, status_code, cmd, target_ids, cmd_id, message):
+        return {
+            "from": "Host_PC", # or "RPi"?
+            "topic": "command",
+            "statusCode": status_code,
+            "payload": {
+                "target_id": str(target_ids), # I don't know what to put in "MAC" 
+                "command": str(cmd),
+                "command_id": str(cmd_id),
+                "message": message
+            }
+        }
+    
     def send_burst(self, cmd_input, delay_sec, prep_led_sec, target_ids, data, retries=3):
         global idx, cmd_list
+        error_response = self._format_response(-1, cmd_input, target_ids, -1, "Port not open or initialization failed")
         if not self.ser or not self.ser.is_open:
             return False
 
@@ -49,7 +64,6 @@ class ESP32BTSender:
         for i in range(16):
             if cmd_list[i] < target_time and i != idx:
                 cmd_list[i] = target_time
-                # print debug info...
                 cmd_int = i * 16 + cmd_int
                 packet = f"{cmd_int},{delay_us},{prep_led_us},{target_mask:x},{data[0]},{data[1]},{data[2]}\n"
                 add_cmd_fail = 0
@@ -57,8 +71,10 @@ class ESP32BTSender:
                 break 
         logger.info(f"Sending: {packet.strip()}")
         if add_cmd_fail == 1:
-            print("Add command FAIL due to full pending number\n")
-            return False
+            msg = "Add command FAIL due to full pending number"
+            print(f"{msg}\n")
+            return self._format_response(-1, cmd_input, target_ids, idx, msg)
+        last_error_msg = "Unknown Error"
         for attempt in range(retries + 1):
             self.ser.reset_input_buffer()
             if attempt > 0:
@@ -84,30 +100,34 @@ class ESP32BTSender:
                             esp_total_us = float(parts[4])
                     except ValueError:
                         pass
-                    transport_us = total_rtt_us - esp_total_us
-                    print(f"Total Round-Trip Time : {total_rtt_us:8.2f} us")
-                    print(f"  ├─ Transport (USB/OS) : {transport_us:8.2f} us")
-                    print(f"  └─ ESP32 Internal     : {esp_total_us:8.2f} us")
-                    print(f"       ├─ RingBuf Read  : {esp_read_us:8.2f} us")
-                    print(f"       └─ Logic & Parse : {esp_parse_us:8.2f} us")
+                    # transport_us = total_rtt_us - esp_total_us
+                    # print(f"Total Round-Trip Time : {total_rtt_us:8.2f} us")
+                    # print(f"  ├─ Transport (USB/OS) : {transport_us:8.2f} us")
+                    # print(f"  └─ ESP32 Internal     : {esp_total_us:8.2f} us")
+                    # print(f"       ├─ RingBuf Read  : {esp_read_us:8.2f} us")
+                    # print(f"       └─ Logic & Parse : {esp_parse_us:8.2f} us")
                     raw_done = self.ser.read_until(b'DONE\n')
                     if b"DONE" in raw_done:
-                        return True
+                        return self._format_response(0, cmd_input, target_ids, idx, "Success")
                     else:
                         logger.warning(f"Got ACK but missed DONE signal: {raw_done}")
-                        return True
+                        return self._format_response(0, cmd_input, target_ids, idx, f"Success (Warning: Missed DONE signal, raw: {raw_done})")
                 elif "NAK" in line:
-                    logger.warning(f"Device rejected: {line}")
+                    last_error_msg = f"Device rejected: {line}"
+                    logger.warning(last_error_msg)
                 else:
                     if not line:
-                        logger.warning("Timeout: No ACK received.")
+                        last_error_msg = "Timeout: No ACK received"
+                        logger.warning(last_error_msg)
                     else:
-                        logger.warning(f"Unexpected response: {line}")
+                        last_error_msg = f"Unexpected response: {line}"
+                        logger.warning(last_error_msg)
             except Exception as e:
-                logger.error(f"Error: {e}")
+                last_error_msg = f"Exception: {str(e)}"
+                logger.error(last_error_msg)
 
         logger.error("Failed to send command after retries.")
-        return False
+        return self._format_response(-1, cmd_input, target_ids, idx, last_error_msg)
 
     def __enter__(self):
         self.connect()
